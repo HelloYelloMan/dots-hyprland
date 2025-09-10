@@ -5,11 +5,14 @@ source ./scriptdata/environment-variables
 source ./scriptdata/functions
 source ./scriptdata/installers
 source ./scriptdata/options
+: "${CONFIG_ONLY:=false}"
 
 #####################################################################################
-if ! command -v pacman >/dev/null 2>&1; then
-  printf "\e[31m[$0]: pacman not found, it seems that the system is not ArchLinux or Arch-based distros. Aborting...\e[0m\n"
-  exit 1
+if [[ $CONFIG_ONLY != true ]]; then
+  if ! command -v pacman >/dev/null 2>&1; then
+    printf "\e[31m[$0]: pacman not found, it seems that the system is not ArchLinux or Arch-based distros. Aborting...\e[0m\n"
+    exit 1
+  fi
 fi
 prevent_sudo_or_root
 
@@ -57,6 +60,7 @@ esac
 
 set -e
 #####################################################################################
+if [[ $CONFIG_ONLY != true ]]; then
 printf "\e[36m[$0]: 1. Get packages and setup user groups/services\n\e[0m"
 
 # Issue #363
@@ -150,7 +154,7 @@ v sudo systemctl enable bluetooth --now
 v gsettings set org.gnome.desktop.interface font-name 'Rubik 11'
 v gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
 v kwriteconfig6 --file kdeglobals --group KDE --key widgetStyle Darkly
-
+fi
 
 #####################################################################################
 printf "\e[36m[$0]: 2. Copying + Configuring\e[0m\n"

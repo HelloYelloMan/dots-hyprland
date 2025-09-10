@@ -32,3 +32,56 @@ output_path = '~/.local/state/quickshell/user/generated/color.txt'
 [templates.wallpaper]
 input_path = '~/.config/matugen/templates/wallpaper.txt'
 output_path = '~/.local/state/quickshell/user/generated/wallpaper/path.txt'
+
+[templates.kitty]
+input_path = "~/.config/matugen/templates/apps/kitty-colors.conf"
+output_path = "~/.config/kitty/colors.conf"
+post_hook = "killall -SIGUSR1 kitty"
+
+[templates.discord]
+input_path = "~/.config/matugen/templates/apps/midnight-discord.css"
+output_path = "~/.config/Vencord/settings/quickCss.css"
+
+[config.custom_colors.red]
+color = "#FF0000"
+blend = true
+
+[config.custom_colors.green]
+color = "#00FF00"
+blend = true
+
+[config.custom_colors.yellow]
+color = "#FFFF00"
+blend = true
+
+[config.custom_colors.blue]
+color = "#0000FF"
+blend = true
+
+[config.custom_colors.magenta]
+color = "#FF00FF"
+blend = true
+
+[config.custom_colors.cyan]
+color = "#00FFFF"
+blend = true
+
+[config.custom_colors.white]
+color = "#FFFFFF"
+blend = true
+
+[config.custom_colors.pink]
+color = "#FF0080"
+blend = true
+
+[config.custom_colors.purple]
+color = "#8000FF"
+blend = true
+
+[config.custom_colors.slate]
+color = "#708090"
+blend = true
+
+[config.custom_colors.orange]
+color = "#FF8000"
+blend = true

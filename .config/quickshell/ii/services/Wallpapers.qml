@@ -22,36 +22,50 @@ Singleton {
     property url defaultFolder: Qt.resolvedUrl(`${Directories.pictures}/Wallpapers`)
     property alias folderModel: folderModel // Expose for direct binding when needed
     property string searchQuery: ""
-    readonly property list<string> extensions: [ // TODO: add videos
-        "jpg", "jpeg", "png", "webp", "avif", "bmp", "svg"
-    ]
+        // Supported extensions (images + videos)
+        readonly property list<string> extensions: [
+            "jpg", "jpeg", "png", "webp", "avif", "bmp", "svg",
+            "webm", "mp4", "mkv", "avi", "mov"
+        ]
+
     property list<string> wallpapers: [] // List of absolute file paths (without file://)
-    readonly property bool thumbnailGenerationRunning: thumbgenProc.running
-    property real thumbnailGenerationProgress: 0
 
     signal changed()
     signal thumbnailGenerated(directory: string)
-    signal thumbnailGeneratedFile(filePath: string)
 
     // Executions
     Process {
         id: applyProc
     }
     
-    function openFallbackPicker(darkMode = Appearance.m3colors.darkmode) {
-        applyProc.exec([
+    function openFallbackPicker(darkMode = Appearance.m3colors.darkmode, wallpaperGroup = true, monitorName = "") {
+        const args = [
             Directories.wallpaperSwitchScriptPath,
             "--mode", (darkMode ? "dark" : "light")
-        ])
+        ]
+        if (wallpaperGroup) {
+            args.push("--group")
+        }
+        if (monitorName && monitorName.length) {
+            args.push("--monitor", monitorName)
+        }
+        applyProc.exec(args)
     }
 
-    function apply(path, darkMode = Appearance.m3colors.darkmode) {
+    function apply(path, darkMode = Appearance.m3colors.darkmode, wallpaperGroup = true, monitorName = "") {
         if (!path || path.length === 0) return
-        applyProc.exec([
+        const args = [
             Directories.wallpaperSwitchScriptPath,
             "--image", path,
             "--mode", (darkMode ? "dark" : "light")
-        ])
+        ]
+        if (wallpaperGroup) {
+            args.push("--group")
+        }
+        if (monitorName && monitorName.length) {
+            args.push("--monitor", monitorName)
+        }
+        applyProc.exec(args)
         root.changed()
     }
 
@@ -59,22 +73,29 @@ Singleton {
         id: selectProc
         property string filePath: ""
         property bool darkMode: Appearance.m3colors.darkmode
-        function select(filePath, darkMode = Appearance.m3colors.darkmode) {
+        property bool wallpaperGroup: true
+        property string monitorName: ""
+
+        function select(filePath, darkMode = Appearance.m3colors.darkmode, wallpaperGroup = true, monitorName = "") {
             selectProc.filePath = filePath
             selectProc.darkMode = darkMode
+            selectProc.wallpaperGroup = wallpaperGroup
+            selectProc.monitorName = monitorName
             selectProc.exec(["test", "-d", FileUtils.trimFileProtocol(filePath)])
         }
+
         onExited: (exitCode, exitStatus) => {
             if (exitCode === 0) {
                 setDirectory(selectProc.filePath);
                 return;
             }
-            root.apply(selectProc.filePath, selectProc.darkMode);
+            // NOTE: correct order: (path, darkMode, wallpaperGroup, monitorName)
+            root.apply(selectProc.filePath, selectProc.darkMode, selectProc.wallpaperGroup, selectProc.monitorName);
         }
     }
 
-    function select(filePath, darkMode = Appearance.m3colors.darkmode) {
-        selectProc.select(filePath, darkMode);
+    function select(filePath, darkMode = Appearance.m3colors.darkmode, wallpaperGroup = true, monitorName = "") {
+        selectProc.select(filePath, darkMode, wallpaperGroup, monitorName);
     }
 
     Process {
@@ -83,10 +104,7 @@ Singleton {
         function setDirectoryIfValid(path) {
             validateDirProc.nicePath = FileUtils.trimFileProtocol(path).replace(/\/+$/, "")
             if (/^\/*$/.test(validateDirProc.nicePath)) validateDirProc.nicePath = "/";
-            validateDirProc.exec([
-                "bash", "-c",
-                `if [ -d "${validateDirProc.nicePath}" ]; then echo dir; elif [ -f "${validateDirProc.nicePath}" ]; then echo file; else echo invalid; fi`
-            ])
+            validateDirProc.exec(["test", "-d", nicePath])
         }
         stdout: StdioCollector {
             onStreamFinished: {
@@ -123,7 +141,8 @@ Singleton {
         showDirs: true
         showDotAndDotDot: false
         showOnlyReadable: true
-        sortField: FolderListModel.Time
+        showDirsFirst: true
+        sortField: FolderListModel.Name
         sortReversed: false
         onCountChanged: {
             root.wallpapers = []
@@ -144,28 +163,11 @@ Singleton {
             "bash", "-c",
             `${thumbgenScriptPath} --size ${size} --machine_progress -d ${FileUtils.trimFileProtocol(root.directory)} || ${generateThumbnailsMagickScriptPath} --size ${size} -d ${root.directory}`,
         ]
-        root.thumbnailGenerationProgress = 0
         thumbgenProc.running = true
     }
     Process {
         id: thumbgenProc
         property string directory
-        stdout: SplitParser {
-            onRead: data => {
-                // print("thumb gen proc:", data)
-                let match = data.match(/PROGRESS (\d+)\/(\d+)/)
-                if (match) {
-                    const completed = parseInt(match[1])
-                    const total = parseInt(match[2])
-                    root.thumbnailGenerationProgress = completed / total
-                }
-                match = data.match(/FILE (.+)/)
-                if (match) {
-                    const filePath = match[1]
-                    root.thumbnailGeneratedFile(filePath)
-                }
-            }
-        }
         onExited: (exitCode, exitStatus) => {
             root.thumbnailGenerated(thumbgenProc.directory)
         }

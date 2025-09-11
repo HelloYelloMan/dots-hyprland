@@ -1,7 +1,7 @@
-export HYPRCURSOR_THEME="Bibata-Modern-Classic"
+export HYPRCURSOR_THEME="Google-Dot-Black"
 export HYPRCURSOR_SIZE=24
 
-export XCURSOR_THEME="Bibata-Modern-Classic"
+export XCURSOR_THEME="Google-Dot-Black"
 export XCURSOR_SIZE=24
 
 export LIBVA_DRIVER_NAME=nvidia
@@ -27,3 +27,4 @@ export APP2UNIT_SLICES='a=app-graphical.slice b=background-graphical.slice s=ses
 export APP2UNIT_TYPE=service
 
 export qsconfig=ii
+export QS_ICON_THEME="Azure-Dark-Icons"

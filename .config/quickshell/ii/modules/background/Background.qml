@@ -38,16 +38,13 @@ Variants {
         property list<var> relevantWindows: HyprlandData.windowList.filter(win => win.monitor == monitor?.id && win.workspace.id >= 0).sort((a, b) => a.workspace.id - b.workspace.id)
         property int firstWorkspaceId: relevantWindows[0]?.workspace.id || 1
         property int lastWorkspaceId: relevantWindows[relevantWindows.length - 1]?.workspace.id || 10
-
         // Wallpaper (per-monitor with staged apply)
         property string monitorKey: (monitor?.name || "").toLowerCase().replace(/-/g, "_")
         property var    perMonCfg: Config?.options?.background?.perMonitor?.[monitorKey]
         property string baseWallpaperPath: (perMonCfg && perMonCfg.wallpaperPath && perMonCfg.wallpaperPath !== "") ? perMonCfg.wallpaperPath : (Config?.options?.background?.wallpaperPath || "")
         property string baseThumbnailPath: (perMonCfg && perMonCfg.thumbnailPath && perMonCfg.thumbnailPath !== "") ? perMonCfg.thumbnailPath : (Config?.options?.background?.thumbnailPath || "")
         property bool   wallpaperIsVideo: baseWallpaperPath.endsWith(".mp4") || baseWallpaperPath.endsWith(".webm") || baseWallpaperPath.endsWith(".mkv") || baseWallpaperPath.endsWith(".avi") || baseWallpaperPath.endsWith(".mov")
-        property string stagedWallpaperPath: wallpaperIsVideo ? baseThumbnailPath : baseWallpaperPath
-        property string wallpaperPath: ""
-
+        property string wallpaperPath: wallpaperIsVideo ? baseThumbnailPath : baseWallpaperPath
         // Animation
         property bool parallaxAnimEnabled: false
         Timer {
@@ -58,12 +55,9 @@ Variants {
             onTriggered: bgRoot.parallaxAnimEnabled = true
         }
         property bool clockClampEnabled: false
-
-        // Geometry
-        property int  wallpaperWidth: modelData.width
-        property int  wallpaperHeight: modelData.height
         property real wallpaperToScreenRatio: Math.min(wallpaperWidth / screen.width, wallpaperHeight / screen.height)
-
+        property int wallpaperWidth: modelData.width // Some reasonable init value, to be updated
+        property int wallpaperHeight: modelData.height // Some reasonable init value, to be updated
         // Fit / Cover / Zoom (relative to FIT)
         property real fitScale: {
             const w = wallpaperWidth, h = wallpaperHeight, sw = screen.width, sh = screen.height;
@@ -75,70 +69,50 @@ Variants {
             if (w <= 0 || h <= 0 || sw <= 0 || sh <= 0) return 1;
             return Math.max(sw / w, sh / h);
         }
+        property real effectiveWallpaperScale: {
+            const targetZoom = Math.max(1, (Config?.options?.background?.parallax?.workspaceZoom || 1));
+            const axisScale = Config?.options?.background?.parallax?.enableWorkspace
+                ? (verticalParallax ? (screen.height / (wallpaperHeight * fitScale)) : (screen.width / (wallpaperWidth * fitScale)))
+                : 1;
+            return Math.max(1, (axisScale * targetZoom) / (coverScale / fitScale));
+        }
         property real coverN: coverScale / fitScale
-        property real fitW: wallpaperWidth * fitScale
-        property real fitH: wallpaperHeight * fitScale
-
+        property real movableXSpace: ((wallpaperWidth / wallpaperToScreenRatio * effectiveWallpaperScale) - screen.width) / 2
+        property real movableYSpace: ((wallpaperHeight / wallpaperToScreenRatio * effectiveWallpaperScale) - screen.height) / 2
         readonly property bool verticalParallax: {
-            // Manual override
             if (Config.options.background.parallax.vertical) return true;
             if (!Config.options.background.parallax.autoVertical) return false;
 
-            // Orientation default
-            const defaultVertical = bgRoot.screen.height > bgRoot.screen.width;
+            const screenIsPortrait = bgRoot.screen.height > bgRoot.screen.width;
 
-            // Guards
-            const fitWv = bgRoot.fitW, fitHv = bgRoot.fitH;
-            const sw = bgRoot.screen.width, sh = bgRoot.screen.height;
-            if (!(fitWv > 0) || !(fitHv > 0) || !(sw > 0) || !(sh > 0)) return defaultVertical;
+            const fitWidth  = wallpaperWidth * fitScale;
+            const fitHeight = wallpaperHeight * fitScale;
+            const screenWidth  = bgRoot.screen.width;
+            const screenHeight = bgRoot.screen.height;
+            if (!(fitWidth > 0) || !(fitHeight > 0) || !(screenWidth > 0) || !(screenHeight > 0)) return screenIsPortrait;
 
-            // Hypothetical normalized scales for each axis
-            const sAxisH = sw / fitWv;
-            const sAxisV = sh / fitHv;
-            const sNormH = Math.max(bgRoot.coverN, sAxisH * bgRoot.targetN);
-            const sNormV = Math.max(bgRoot.coverN, sAxisV * bgRoot.targetN);
+            const targetZoom = Math.max(1, (Config?.options?.background?.parallax?.workspaceZoom || 1));
+            const threshold  = 0.16;
 
-            // Rendered size along pan axes
-            const renderW_H = fitWv * sNormH; // width if we prioritize horizontal parallax
-            const renderH_V = fitHv * sNormV; // height if we prioritize vertical parallax
+            const scaleIfHorizontalAxis = screenWidth  / fitWidth;
+            const scaleIfVerticalAxis   = screenHeight / fitHeight;
 
-            // Slack percentage along each pan axis
-            const slackPctH = Math.max(0, (renderW_H - sw) / sw);
-            const slackPctV = Math.max(0, (renderH_V - sh) / sh);
+            const normalizedScaleHorizontal = Math.max((coverScale / fitScale), scaleIfHorizontalAxis * targetZoom);
+            const normalizedScaleVertical   = Math.max((coverScale / fitScale), scaleIfVerticalAxis   * targetZoom);
 
-            const th = bgRoot.parallaxSlackSwitchThreshold;
+            const renderedWidthIfHorizontalPan  = fitWidth  * normalizedScaleHorizontal;
+            const renderedHeightIfVerticalPan   = fitHeight * normalizedScaleVertical;
 
-            if (defaultVertical) {
-                return (slackPctH - slackPctV) > th ? false : true;
+            const slackRatioHorizontal = Math.max(0, (renderedWidthIfHorizontalPan  - screenWidth)  / screenWidth);
+            const slackRatioVertical   = Math.max(0, (renderedHeightIfVerticalPan   - screenHeight) / screenHeight);
+
+            if (screenIsPortrait) {
+                return (slackRatioHorizontal - slackRatioVertical) > threshold ? false : true;
             } else {
-                return (slackPctV - slackPctH) > th ? true : false;
+                return (slackRatioVertical - slackRatioHorizontal) > threshold ? true : false;
             }
         }
-
-        property real preferredWallpaperScale: Math.max(1, (Config?.options?.background?.parallax?.workspaceZoom || 1))
-        property real targetN: preferredWallpaperScale
-
-        // Switch only if the other axis gains this much extra slack (as a fraction of screen size)
-        property real parallaxSlackSwitchThreshold: 0.16
-
-        // Only count zoom that creates slack on the active parallax axis
-        property real sAxis: {
-            if (Config?.options?.background?.parallax?.enableWorkspace) {
-                return verticalParallax ? (screen.height / fitH) : (screen.width / fitW);
-            }
-            return 1;
-        }
-        property real sNormFinal: Math.max(coverN, sAxis * targetN)
-
-        // Effective scale (final size = (W * fitScale) * sNormFinal)
-        property real effectiveWallpaperScale: sNormFinal / coverN
-
-        // Travel space
-        property real movableXSpace: ((wallpaperWidth / wallpaperToScreenRatio * effectiveWallpaperScale) - screen.width) / 2
-        property real movableYSpace: ((wallpaperHeight / wallpaperToScreenRatio * effectiveWallpaperScale) - screen.height) / 2
-
         // Position
-
         property real clockX: (modelData.width / 2) + ((Math.random() < 0.5 ? -1 : 1) * modelData.width)
         property real clockY: (modelData.height / 2) + ((Math.random() < 0.5 ? -1 : 1) * modelData.height)
         property var textHorizontalAlignment: {
@@ -150,7 +124,6 @@ Variants {
                 return Text.AlignRight;
             return Text.AlignHCenter;
         }
-        
         // Colors
         property bool shouldBlur: (GlobalStates.screenLocked && Config.options.background.lockBlur.enable)
         property color dominantColor: Appearance.colors.colPrimary
@@ -174,82 +147,72 @@ Variants {
         }
         color: "transparent"
 
-        // Triggers
-        onStagedWallpaperPathChanged: {
-            parallaxAnimEnabled = false
-            clockClampEnabled = false
-            clockLoader.opacity = 0
-            seedOffscreenClock()
-            updateZoomScale()
-        }
-        Component.onCompleted: updateZoomScale()
-
-        // Seed off-screen
-        function seedOffscreenClock() {
-            const off = Math.max(bgRoot.screen.width, bgRoot.screen.height) * 1.2
-            const dirX = Math.random() < 0.5 ? -1 : 1
-            const dirY = Math.random() < 0.5 ? -1 : 1
-            bgRoot.clockX = (dirX < 0 ? -off : (bgRoot.screen.width  + off)) / bgRoot.effectiveWallpaperScale
-            bgRoot.clockY = (dirY < 0 ? -off : (bgRoot.screen.height + off)) / bgRoot.effectiveWallpaperScale
+        onWallpaperPathChanged: {
+            bgRoot.updateZoomScale()
+            // Clock position gets updated after zoom scale is updated
         }
 
-        // Size probe
+        // Wallpaper zoom scale
         function updateZoomScale() {
-            if (!stagedWallpaperPath || stagedWallpaperPath.length === 0) return;
-            getWallpaperSizeProc.path = stagedWallpaperPath
-            getWallpaperSizeProc.running = true
+            getWallpaperSizeProc.path = bgRoot.wallpaperPath
+            getWallpaperSizeProc.running = true;
         }
         Process {
             id: getWallpaperSizeProc
-            property string path: ""
+            property string path: bgRoot.wallpaperPath
             command: [ "magick", "identify", "-format", "%w %h", path ]
             stdout: StdioCollector {
                 id: wallpaperSizeOutputCollector
                 onStreamFinished: {
                     const output = wallpaperSizeOutputCollector.text
-                    const parts = output.split(" ")
-                    if (parts.length >= 2) {
-                        bgRoot.wallpaperWidth = Number(parts[0])
-                        bgRoot.wallpaperHeight = Number(parts[1])
-                    }
+                    const [width, height] = output.split(" ").map(Number);
+                    const [screenWidth, screenHeight] = [bgRoot.screen.width, bgRoot.screen.height];
+                    bgRoot.wallpaperWidth = width
+                    bgRoot.wallpaperHeight = height
                     bgRoot.updateClockPosition()
-                    bgRoot.wallpaperPath = bgRoot.stagedWallpaperPath
                     enableParallaxAnim.start()
                 }
             }
         }
 
-        // Trigger clock update position
+        // Clock positioning
         function updateClockPosition() {
-            leastBusyRegionProc.running = false
-            leastBusyRegionProc.running = true
+            // Somehow all this manual setting is needed to make the proc correctly use the new values
+            leastBusyRegionProc.path = bgRoot.wallpaperPath
+            leastBusyRegionProc.contentWidth = clockLoader.implicitWidth + root.clockSizePadding * 2
+            leastBusyRegionProc.contentHeight = clockLoader.implicitHeight + root.clockSizePadding * 2
+            leastBusyRegionProc.horizontalPadding = bgRoot.verticalParallax ? leastBusyRegionProc.contentWidth / 2 : Math.max(bgRoot.movableXSpace + root.screenSizePadding * 2, leastBusyRegionProc.contentWidth)
+            leastBusyRegionProc.verticalPadding = bgRoot.verticalParallax ? Math.max(bgRoot.movableYSpace + root.screenSizePadding * 2, leastBusyRegionProc.contentHeight) : leastBusyRegionProc.contentHeight / 2
+            leastBusyRegionProc.running = false;
+            leastBusyRegionProc.running = true;
         }
         Process {
             id: leastBusyRegionProc
-            property string path: bgRoot.stagedWallpaperPath
-            property int contentWidth:  Math.round((400  + root.clockSizePadding * 2) / bgRoot.effectiveWallpaperScale)
-            property int contentHeight: Math.round((133 + root.clockSizePadding * 2) / bgRoot.effectiveWallpaperScale)
-            property int horizontalPadding: Math.round(root.screenSizePadding / bgRoot.effectiveWallpaperScale)
-            property int verticalPadding:   Math.round(root.screenSizePadding / bgRoot.effectiveWallpaperScale)
-            command: [ Quickshell.shellPath("scripts/images/least_busy_region.py"),
-                "--screen-width",  Math.round(bgRoot.screen.width  / bgRoot.effectiveWallpaperScale),
+            property string path: bgRoot.wallpaperPath
+            property int contentWidth: 300
+            property int contentHeight: 300
+            property int horizontalPadding: bgRoot.movableXSpace
+            property int verticalPadding: bgRoot.movableYSpace
+            command: [Quickshell.shellPath("scripts/images/least_busy_region.py"),
+                "--screen-width", Math.round(bgRoot.screen.width / bgRoot.effectiveWallpaperScale),
                 "--screen-height", Math.round(bgRoot.screen.height / bgRoot.effectiveWallpaperScale),
                 "--width", contentWidth,
                 "--height", contentHeight,
-                "--stride", "25",
                 "--horizontal-padding", horizontalPadding,
                 "--vertical-padding", verticalPadding,
-                path ]
+                path,
+                // "--visual-output",
+            ]
             stdout: StdioCollector {
                 id: leastBusyRegionOutputCollector
                 onStreamFinished: {
                     const output = leastBusyRegionOutputCollector.text
-                    if (output.length === 0) return
-                    const parsed = JSON.parse(output)
+                    if (output.length === 0) return;
+                    const parsedContent = JSON.parse(output)
                     clockLoader.opacity = 1
-                    bgRoot.clockX = parsed.center_x
-                    bgRoot.clockY = parsed.center_y
-                    bgRoot.dominantColor = parsed.dominant_color || Appearance.colors.colPrimary
+                    bgRoot.clockX = parsedContent.center_x * bgRoot.effectiveWallpaperScale
+                    bgRoot.clockY = parsedContent.center_y * bgRoot.effectiveWallpaperScale
+                    bgRoot.dominantColor = parsedContent.dominant_color || Appearance.colors.colPrimary
                     bgRoot.clockClampEnabled = true
                 }
             }
@@ -266,55 +229,54 @@ Variants {
             cache: false
             asynchronous: true
             retainWhileLoading: true
-
-            // Parallax
-            property int  groupSize: Math.max(1, Config?.options.bar.workspaces.shown ?? 3)
-            property int  activeWsId: bgRoot.monitor.activeWorkspace?.id ?? 1
-            property int  indexInGroup: ((activeWsId - 1) % groupSize)
-            property real normInGroup: groupSize > 1 ? (indexInGroup / (groupSize - 1)) : 0.5
-
+            smooth: true
+            // Range = groups that workspaces span on
+            property int chunkSize: Config?.options.bar.workspaces.shown ?? 10;
+            property int lower: Math.floor((bgRoot.monitor.activeWorkspace?.id - 1) / chunkSize) * chunkSize + 1;
+            property int upper: lower + chunkSize - 1;
+            property int range: upper - lower;
             property real valueX: {
-                let r = 0.5
-                if (Config.options.background.parallax.enableWorkspace && !bgRoot.verticalParallax) r = normInGroup
-                if (Config.options.background.parallax.enableSidebar) r += (0.15 * GlobalStates.sidebarRightOpen - 0.15 * GlobalStates.sidebarLeftOpen)
-                return r
+                let result = 0.5;
+                if (Config.options.background.parallax.enableWorkspace && !bgRoot.verticalParallax) {
+                    result = ((bgRoot.monitor.activeWorkspace?.id - lower) / range);
+                }
+                if (Config.options.background.parallax.enableSidebar) {
+                    result += (0.15 * GlobalStates.sidebarRightOpen - 0.15 * GlobalStates.sidebarLeftOpen);
+                }
+                return result;
             }
             property real valueY: {
-                let r = 0.5
-                if (Config.options.background.parallax.enableWorkspace && bgRoot.verticalParallax) r = normInGroup
-                return r
+                let result = 0.5;
+                if (Config.options.background.parallax.enableWorkspace && bgRoot.verticalParallax) {
+                    result = ((bgRoot.monitor.activeWorkspace?.id - lower) / range);
+                }
+                return result;
             }
             property real effectiveValueX: Math.max(0, Math.min(1, valueX))
             property real effectiveValueY: Math.max(0, Math.min(1, valueY))
-
             x: -(bgRoot.movableXSpace) - (effectiveValueX - 0.5) * 2 * bgRoot.movableXSpace
             y: -(bgRoot.movableYSpace) - (effectiveValueY - 0.5) * 2 * bgRoot.movableYSpace
             source: bgRoot.wallpaperPath
             fillMode: Image.PreserveAspectCrop
-
             Behavior on x {
-                enabled: bgRoot.parallaxAnimEnabled
                 NumberAnimation {
                     duration: 600
                     easing.type: Easing.OutCubic
                 }
             }
             Behavior on y {
-                enabled: bgRoot.parallaxAnimEnabled
                 NumberAnimation {
                     duration: 600
                     easing.type: Easing.OutCubic
                 }
             }
             Behavior on width {
-                enabled: bgRoot.parallaxAnimEnabled
                 NumberAnimation {
                     duration: 600
                     easing.type: Easing.OutCubic
                 }
             }
             Behavior on height {
-                enabled: bgRoot.parallaxAnimEnabled
                 NumberAnimation {
                     duration: 600
                     easing.type: Easing.OutCubic
@@ -382,7 +344,7 @@ Variants {
                 Behavior on leftMargin {
                     animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                     }
-                Behavior on topMargin  {
+                Behavior on topMargin {
                     animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                     }
             }
@@ -393,7 +355,7 @@ Variants {
                     target: clockLoader
                     anchors {
                         left: undefined
-                        horizontalCenter: wallpaper.horizontalCenter
+                        horizontalCenter: parent.horizontalCenter
                         right: undefined
                     }
                 }

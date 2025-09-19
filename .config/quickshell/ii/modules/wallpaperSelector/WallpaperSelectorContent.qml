@@ -15,6 +15,7 @@ MouseArea {
     property int columns: 4
     property real previewCellAspectRatio: 4 / 3
     property bool useDarkMode: Appearance.m3colors.darkmode
+    property bool useWallpaperGroups: true
 
     function updateThumbnails() {
         const totalImageMargin = (Appearance.sizes.wallpaperSelectorItemMargins + Appearance.sizes.wallpaperSelectorItemPadding) * 2
@@ -275,7 +276,8 @@ MouseArea {
 
                         function activateCurrent() {
                             const filePath = grid.model.get(currentIndex, "filePath")
-                            root.selectWallpaperPath(filePath);
+                            Wallpapers.select(filePath, root.useDarkMode, root.useWallpaperGroups, monitor.name);
+                            filterField.text = "";
                         }
 
                         model: Wallpapers.folderModel
@@ -294,7 +296,8 @@ MouseArea {
                             }
                             
                             onActivated: {
-                                root.selectWallpaperPath(fileModelData.filePath);
+                                Wallpapers.select(fileModelData.filePath, root.useDarkMode, root.useWallpaperGroups, monitor.name);
+                                filterField.text = "";
                             }
                         }
 
@@ -319,7 +322,7 @@ MouseArea {
                         ToolbarButton {
                             implicitWidth: height
                             onClicked: {
-                                Wallpapers.openFallbackPicker(root.useDarkMode);
+                                Wallpapers.openFallbackPicker(root.useDarkMode, root.useWallpaperGroups, monitor.name);
                                 GlobalStates.wallpaperSelectorOpen = false;
                             }
                             altAction: () => {
@@ -367,6 +370,18 @@ MouseArea {
                             }
                             StyledToolTip {
                                 content: Translation.tr("Click to toggle light/dark mode\n(applied when wallpaper is chosen)")
+                            }
+                        }
+
+                        ToolbarButton {
+                            implicitWidth: height
+                            onClicked: root.useWallpaperGroups = !root.useWallpaperGroups
+                            contentItem: MaterialSymbol {
+                                text: root.useWallpaperGroups ? "auto_awesome_mosaic" : "wallpaper"
+                                iconSize: Appearance.font.pixelSize.larger
+                            }
+                            StyledToolTip {
+                                content: Translation.tr("Click to toggle wallpaper groups")
                             }
                         }
 

@@ -201,13 +201,13 @@ Singleton {
 
     font: QtObject {
         property QtObject family: QtObject {
-            property string main: "Rubik"
-            property string title: "Gabarito"
-            property string iconMaterial: "Material Symbols Rounded"
+            property string main: Config.options.appearance.fonts.main
+            property string title: Config.options.appearance.fonts.title
+            property string iconMaterial: Config.options.appearance.fonts.iconMaterial
             property string iconNerd: "JetBrains Mono NF"
-            property string monospace: "JetBrains Mono NF"
-            property string reading: "Readex Pro"
-            property string expressive: "Space Grotesk"
+            property string monospace: Config.options.appearance.fonts.monospace
+            property string reading: Config.options.appearance.fonts.reading
+            property string expressive: Config.options.appearance.fonts.expressive
         }
         property QtObject pixelSize: QtObject {
             property int smallest: 10

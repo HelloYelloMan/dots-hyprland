@@ -101,6 +101,16 @@ Singleton {
                 property JsonObject palette: JsonObject {
                     property string type: "auto" // Allowed: auto, scheme-content, scheme-expressive, scheme-fidelity, scheme-fruit-salad, scheme-monochrome, scheme-neutral, scheme-rainbow, scheme-tonal-spot
                 }
+                property JsonObject fonts: JsonObject {
+                    property string main: "Rubik"
+                    property string title: "Gabarito"
+                    property string iconMaterial: "Material Symbols Rounded"
+                    property string iconNerd: "JetBrainsMono NF"
+                    property string monospace: "JetBrainsMono NF"
+                    property string reading: "Readex Pro"
+                    property string expressive: "Space Grotesk"
+                }
+                property bool iconFill: false
             }
 
             property JsonObject audio: JsonObject {
